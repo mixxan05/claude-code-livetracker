@@ -1,0 +1,15 @@
+{
+  "name": "claude-code-live-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Lokaler Reverse-Proxy als Echtzeit-Kostenwächter für LLM-API-Verkehr (Claude Code, Aider, Cursor). Zero-Dependency, nur Node-stdlib.",
+  "type": "commonjs",
+  "main": "src/proxy.js",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node src/proxy.js",
+    "test": "node --test"
+  }
+}

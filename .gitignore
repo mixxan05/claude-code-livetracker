@@ -1,0 +1,14 @@
+# Node
+node_modules/
+
+# Laufzeit-Artefakte (nie einchecken – enthalten lokale Verbrauchsdaten)
+session-spend.json
+spend-*.json
+.budget-bypass
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

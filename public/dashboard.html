@@ -1,0 +1,483 @@
+<!--
+  public/dashboard.html — Live-Dashboard des Claude Code Live Trackers.
+
+  Vollständig eigenständig: Inline-CSS und Inline-JS, KEINE externen Requests
+  (CSP-freundlich, passend zur strengen Content-Security-Policy aus dashboard.js).
+  Verbindet sich per EventSource auf /events und rendert den DashboardState live.
+-->
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>Claude Code Live Tracker</title>
+  <style>
+    :root {
+      --bg:        #0d1117;
+      --panel:     #161b22;
+      --panel-2:   #1c2230;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --faint:     #6e7681;
+      --accent:    #58a6ff;
+      --green:     #3fb950;
+      --amber:     #d29922;
+      --red:       #f85149;
+      --shadow:    0 8px 30px rgba(0,0,0,.45);
+      --radius:    14px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(1200px 600px at 50% -10%, #12233b 0%, rgba(18,35,59,0) 60%),
+        var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+                   Helvetica, Arial, sans-serif;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 40px 16px 64px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .card {
+      width: 100%;
+      max-width: 540px;
+      background: linear-gradient(180deg, var(--panel) 0%, #12161d 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,.015);
+    }
+    .brand {
+      font-size: 12.5px;
+      font-weight: 700;
+      letter-spacing: .14em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    .live {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--faint);
+      white-space: nowrap;
+    }
+    .dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      background: var(--faint);
+      box-shadow: 0 0 0 0 rgba(63,185,80,.5);
+    }
+    .live.on   { color: var(--green); }
+    .live.on   .dot { background: var(--green); animation: pulse 1.8s infinite; }
+    .live.off  { color: var(--red); }
+    .live.off  .dot { background: var(--red); }
+    @keyframes pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(63,185,80,.55); }
+      70%  { box-shadow: 0 0 0 7px rgba(63,185,80,0); }
+      100% { box-shadow: 0 0 0 0 rgba(63,185,80,0); }
+    }
+
+    .body { padding: 26px 22px 22px; }
+
+    .today-label {
+      font-size: 12px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+    .today {
+      font-size: 56px;
+      font-weight: 800;
+      line-height: 1;
+      letter-spacing: -.02em;
+      font-variant-numeric: tabular-nums;
+    }
+    .today .cur { color: var(--faint); font-weight: 600; font-size: 34px; margin-right: 4px; }
+
+    .bar-wrap { margin-top: 18px; }
+    .bar {
+      height: 12px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 999px;
+      background: var(--green);
+      transition: width .45s cubic-bezier(.4,0,.2,1), background-color .45s ease;
+    }
+    .bar-meta {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 8px;
+      font-size: 12.5px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 22px;
+    }
+    .tile {
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 13px 14px;
+    }
+    .tile .k {
+      font-size: 11px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--faint);
+      margin-bottom: 5px;
+    }
+    .tile .v {
+      font-size: 18px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+    .tile .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    .last {
+      margin-top: 12px;
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 15px;
+    }
+    .last .k {
+      font-size: 11px;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--faint);
+      margin-bottom: 8px;
+    }
+    .last .model {
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--text);
+    }
+    .last .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 8px;
+      margin-top: 9px;
+    }
+    .chip {
+      font-size: 12px;
+      color: var(--muted);
+      background: rgba(255,255,255,.03);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-variant-numeric: tabular-nums;
+    }
+    .chip.cost { color: var(--green); border-color: rgba(63,185,80,.35); }
+    .last .empty { color: var(--faint); font-size: 13.5px; }
+
+    .warn {
+      margin-top: 14px;
+      display: none;
+      align-items: flex-start;
+      gap: 9px;
+      padding: 11px 13px;
+      background: rgba(210,153,34,.10);
+      border: 1px solid rgba(210,153,34,.4);
+      border-radius: 10px;
+      color: #f0c675;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .warn.show { display: flex; }
+    .warn .ico { flex: none; }
+
+    .bypass {
+      margin-top: 20px;
+      padding-top: 18px;
+      border-top: 1px solid var(--border);
+    }
+    .bypass-status {
+      font-size: 12.5px;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--green);
+    }
+    .bypass-status.bypassed { color: var(--amber); }
+    .bypass-status .pill {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: currentColor;
+    }
+    button#toggle {
+      width: 100%;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      font: inherit;
+      font-weight: 650;
+      font-size: 14px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      transition: background-color .15s ease, border-color .15s ease, transform .05s ease;
+    }
+    button#toggle:hover  { background: #232c3d; border-color: #3d4757; }
+    button#toggle:active { transform: translateY(1px); }
+    button#toggle:disabled { opacity: .55; cursor: progress; }
+    button#toggle.armed { border-color: rgba(248,81,73,.5); }
+
+    .foot {
+      margin-top: 18px;
+      font-size: 11.5px;
+      color: var(--faint);
+      text-align: center;
+      line-height: 1.5;
+    }
+    .foot code {
+      color: var(--muted);
+      background: var(--panel-2);
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 1px 5px;
+      font-size: 11px;
+    }
+
+    @media (max-width: 430px) {
+      .today { font-size: 46px; }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main class="card" role="main">
+    <div class="head">
+      <div class="brand">Claude Code Live Tracker</div>
+      <div class="live off" id="live"><span class="dot"></span><span id="live-text">verbinde …</span></div>
+    </div>
+
+    <div class="body">
+      <div class="today-label">Heute ausgegeben</div>
+      <div class="today"><span class="cur">$</span><span id="today">0.00</span></div>
+
+      <div class="bar-wrap">
+        <div class="bar"><div class="bar-fill" id="bar"></div></div>
+        <div class="bar-meta">
+          <span id="bar-left">0.00 / 0.00 USD</span>
+          <span id="bar-pct">0 %</span>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="tile">
+          <div class="k">Session-Kosten</div>
+          <div class="v">$<span id="session-cost">0.00</span></div>
+          <div class="sub" id="session-sub">seit Proxy-Start</div>
+        </div>
+        <div class="tile">
+          <div class="k">Session-Tokens</div>
+          <div class="v" id="session-tokens">0 / 0</div>
+          <div class="sub">Eingabe / Ausgabe</div>
+        </div>
+      </div>
+
+      <div class="last">
+        <div class="k">Letzte Anfrage</div>
+        <div id="last-content"><div class="empty">Noch keine Anfrage in dieser Session.</div></div>
+      </div>
+
+      <div class="warn" id="warn">
+        <span class="ico">⚠️</span>
+        <span id="warn-text"></span>
+      </div>
+
+      <div class="bypass">
+        <div class="bypass-status" id="bypass-status">
+          <span class="pill"></span><span id="bypass-status-text">Budget-Schutz aktiv</span>
+        </div>
+        <button id="toggle" disabled>Budget-Sperre aufheben</button>
+      </div>
+
+      <div class="foot">
+        Lokaler Reverse-Proxy · API-Schlüssel werden nur durchgereicht, nie gespeichert.<br>
+        IDE auf <code>http://localhost:<span id="foot-port">9000</span></code> zeigen.
+      </div>
+    </div>
+  </main>
+
+  <script>
+    'use strict';
+
+    // --- kleine Formatierungs-Helfer ---------------------------------------
+    function num(n) { n = Number(n); return isFinite(n) ? n : 0; }
+
+    function usd(n, dp) {
+      dp = (dp == null) ? 2 : dp;
+      return num(n).toFixed(dp);
+    }
+
+    // Kompakte Token-Darstellung: 1_234_000 -> "1.2M", 84_000 -> "84k".
+    function tokens(n) {
+      n = num(n);
+      if (n >= 1e6) { var m = n / 1e6; return (m >= 10 ? m.toFixed(0) : m.toFixed(1)).replace(/\.0$/, '') + 'M'; }
+      if (n >= 1e3) { var k = n / 1e3; return (k >= 10 ? k.toFixed(0) : k.toFixed(1)).replace(/\.0$/, '') + 'k'; }
+      return String(Math.round(n));
+    }
+
+    // Kosten einer einzelnen Anfrage: unter $1 feiner aufgelöst.
+    function costFine(n) {
+      n = num(n);
+      if (n === 0) return '$0.00';
+      if (n < 1) return '$' + n.toFixed(4);
+      return '$' + n.toFixed(2);
+    }
+
+    function el(id) { return document.getElementById(id); }
+
+    // --- Rendering ----------------------------------------------------------
+    function render(s) {
+      s = s || {};
+
+      // Große Tages-Kosten.
+      el('today').textContent = usd(s.todayCostUSD);
+
+      // Fortschrittsbalken zum Tageslimit.
+      var limit = num(s.dailyLimitUSD);
+      var today = num(s.todayCostUSD);
+      var bar = el('bar');
+      if (limit > 0) {
+        var pct = Math.min(100, (today / limit) * 100);
+        bar.style.width = pct.toFixed(1) + '%';
+        bar.style.background =
+          pct >= 90 ? 'var(--red)' : (pct >= 60 ? 'var(--amber)' : 'var(--green)');
+        el('bar-left').textContent = usd(today) + ' / ' + usd(limit) + ' USD';
+        el('bar-pct').textContent = Math.round(pct) + ' %';
+      } else {
+        bar.style.width = '0%';
+        el('bar-left').textContent = usd(today) + ' USD · kein Limit gesetzt';
+        el('bar-pct').textContent = '–';
+      }
+
+      // Session.
+      el('session-cost').textContent = usd(s.sessionCostUSD);
+      el('session-tokens').textContent =
+        tokens(s.sessionInputTokens) + ' / ' + tokens(s.sessionOutputTokens);
+
+      // Letzte Anfrage.
+      var lastEl = el('last-content');
+      var lr = s.lastRequest;
+      if (lr && (lr.model || lr.inputTokens || lr.outputTokens || lr.costUSD)) {
+        var chips =
+          '<span class="chip">' + tokens(lr.inputTokens) + ' Eingabe</span>' +
+          '<span class="chip">' + tokens(lr.outputTokens) + ' Ausgabe</span>' +
+          '<span class="chip">' + tokens(lr.cacheReadTokens) + ' Cache-Read</span>' +
+          '<span class="chip cost">' + costFine(lr.costUSD) + '</span>';
+        lastEl.innerHTML =
+          '<div class="model">' + escapeHtml(lr.model || 'unbekanntes Modell') + '</div>' +
+          '<div class="chips">' + chips + '</div>';
+      } else {
+        lastEl.innerHTML = '<div class="empty">Noch keine Anfrage in dieser Session.</div>';
+      }
+
+      // Warnung.
+      var warn = el('warn');
+      if (s.warning) {
+        el('warn-text').textContent = s.warning;
+        warn.classList.add('show');
+      } else {
+        warn.classList.remove('show');
+      }
+
+      // Bypass-Status + Button-Beschriftung.
+      var status = el('bypass-status');
+      var btn = el('toggle');
+      if (s.bypassActive) {
+        status.classList.add('bypassed');
+        el('bypass-status-text').textContent = 'Budget-Schutz aufgehoben (Bypass aktiv)';
+        btn.textContent = '🔒 Budget-Sperre wieder aktivieren';
+        btn.classList.remove('armed');
+        btn.dataset.next = 'false';
+      } else {
+        status.classList.remove('bypassed');
+        el('bypass-status-text').textContent = 'Budget-Schutz aktiv';
+        btn.textContent = '🔓 Budget-Sperre aufheben';
+        btn.classList.add('armed');
+        btn.dataset.next = 'true';
+      }
+      btn.disabled = false;
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+
+    // --- Bypass-Umschalter ---------------------------------------------------
+    el('toggle').addEventListener('click', function () {
+      var btn = el('toggle');
+      var active = btn.dataset.next === 'true';
+      btn.disabled = true;
+      fetch('/api/bypass', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: active })
+      }).then(function (r) { return r.json(); })
+        .catch(function () { /* UI aktualisiert sich über den nächsten SSE-Broadcast */ })
+        .finally(function () {
+          // Sicherheitsnetz, falls kein Broadcast eintrifft.
+          setTimeout(function () { btn.disabled = false; }, 1200);
+        });
+    });
+
+    // --- Verbindungsstatus ---------------------------------------------------
+    function setLive(state) {
+      var live = el('live');
+      var text = el('live-text');
+      live.classList.remove('on', 'off');
+      if (state === 'on')  { live.classList.add('on');  text.textContent = 'live'; }
+      else                 { live.classList.add('off'); text.textContent = 'getrennt – verbinde neu …'; }
+    }
+
+    // Port für den Footer-Hinweis aus der aktuellen Adresse ableiten.
+    el('foot-port').textContent = (location.port || '9000');
+
+    // --- SSE-Anbindung -------------------------------------------------------
+    var es = new EventSource('/events');
+    es.onopen = function () { setLive('on'); };
+    es.onerror = function () { setLive('off'); }; // EventSource verbindet automatisch neu
+    es.onmessage = function (ev) {
+      try { render(JSON.parse(ev.data)); }
+      catch (e) { /* fehlerhafte Payload ignorieren */ }
+    };
+  </script>
+</body>
+</html>
