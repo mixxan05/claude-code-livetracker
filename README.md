@@ -1,5 +1,10 @@
 # Claude Code Live Tracker
 
+[![CI](https://github.com/mixxan05/claude-code-livetracker/actions/workflows/ci.yml/badge.svg)](https://github.com/mixxan05/claude-code-livetracker/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
+[![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)
+
 Ein **lokaler Reverse-Proxy** als Echtzeit-Kostenwächter für den API-Verkehr autonomer
 Coding-Agenten (Claude Code, Aider, Cursor, VS Code). Der Proxy fängt den Verkehr ab, parst das
 `usage`-Feld der Antworten, berechnet in Millisekunden die echten Kosten und streamt sie live in
@@ -23,6 +28,8 @@ Upstream. Das Tracking läuft parallel zum durchgereichten Stream und verzögert
 ## Setup & Start
 
 ```bash
+git clone https://github.com/mixxan05/claude-code-livetracker.git
+cd claude-code-livetracker
 node src/proxy.js
 ```
 
@@ -202,6 +209,14 @@ Claude Code Live Tracker/
     └── superpowers/specs/2026-07-02-claude-code-live-tracker-design.md
 ```
 
-> Hinweis: Die Module unter `src/` sowie `public/dashboard.html` werden von den folgenden
-> Implementierungs-Agenten erstellt. Dieses Repository enthält im Fundament-Stand das
-> Projektgerüst (Konfiguration, Preise, Verträge, Doku).
+---
+
+## Mitwirken
+
+Beiträge sind willkommen! Das Projekt ist bewusst **zero-dependency** (ausschließlich
+Node-stdlib) — bitte diesen Grundsatz beibehalten. Vor einem Pull Request `node --test`
+ausführen; alle Tests müssen grün sein. Neue Funktionen möglichst mit Tests abdecken.
+
+## Lizenz
+
+[MIT](LICENSE) © Michael Kaiser
