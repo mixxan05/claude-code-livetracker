@@ -135,6 +135,47 @@ function loadPricing(pricingPath) {
 }
 
 /**
+ * Löst den Preis-Eintrag für eine Modell-ID auf — mit Präfix-Fallback.
+ *
+ * Hintergrund: Der `model`-Wert stammt aus der ANTWORT des Upstreams, nicht aus dem
+ * Request. OpenAI (und teils Anthropic) liefern dort die aufgelöste, DATIERTE
+ * Snapshot-ID zurück (z. B. `gpt-4o-2024-08-06`), während `pricing.json` die Basis-IDs
+ * (`gpt-4o`) führt. Ein reiner Exact-Match würde praktisch jeden realen OpenAI-Response
+ * verfehlen → Kosten 0 → Budget-Guard unterzählt.
+ *
+ * Auflösung:
+ *   1. Exakter Treffer.
+ *   2. Sonst: längster passender Präfix-Key an Bindestrich-Grenze
+ *      (`gpt-4o-2024-08-06` → `gpt-4o`; `gpt-4o-mini-2024-07-18` → `gpt-4o-mini`,
+ *      da der längste Präfix gewinnt).
+ *
+ * @param {string} model
+ * @param {Object<string, ModelPrice>} pricing
+ * @returns {ModelPrice|undefined}
+ */
+function resolvePrice(model, pricing) {
+  if (!model || !pricing || typeof pricing !== 'object') return undefined;
+
+  // 1) Exakter Treffer.
+  if (pricing[model] && typeof pricing[model] === 'object') return pricing[model];
+
+  // 2) Längster passender Präfix-Key (Wortgrenze am Bindestrich, verhindert dass
+  //    z. B. "gpt-4" fälschlich auf "gpt-45..." matcht).
+  let best;
+  let bestLen = -1;
+  for (const key of Object.keys(pricing)) {
+    if (key.length > bestLen && model.startsWith(key + '-')) {
+      const entry = pricing[key];
+      if (entry && typeof entry === 'object') {
+        best = entry;
+        bestLen = key.length;
+      }
+    }
+  }
+  return best;
+}
+
+/**
  * Berechnet die Kosten einer Anfrage aus ihrer normalisierten Nutzung.
  *
  * Formel (USD):
@@ -173,7 +214,7 @@ function computeCost(normalizedUsage) {
   const cacheCreation5mTokens = toNonNegativeNumber(usage.cacheCreation5mTokens);
   const cacheCreation1hTokens = toNonNegativeNumber(usage.cacheCreation1hTokens);
 
-  const price = model ? activePricing[model] : undefined;
+  const price = model ? resolvePrice(model, activePricing) : undefined;
 
   // --- Unbekanntes oder fehlendes Modell -----------------------------------
   // Kosten 0 + Warnung; Anzeige-Tokens trotzdem durchreichen (Contract).

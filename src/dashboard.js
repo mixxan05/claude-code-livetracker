@@ -161,6 +161,26 @@ function safeWrite(res, frame) {
   }
 }
 
+/**
+ * Prüft die Herkunft eines zustandsändernden Requests (CSRF-Schutz für /api/bypass).
+ * Ist ein Origin- bzw. Referer-Header vorhanden, muss dessen Host lokal sein
+ * (localhost / 127.0.0.1 / [::1]); eine cross-origin Fremdseite (fetch oder
+ * Auto-Submit-Formular) trägt eine fremde Origin und wird abgewiesen. Fehlt beides
+ * (z. B. curl, kein Browser-Kontext), wird erlaubt — dort gibt es kein CSRF-Risiko.
+ * @param {import('http').IncomingMessage} req
+ * @returns {boolean}
+ */
+function isLocalRequestOrigin(req) {
+  const source = req.headers['origin'] || req.headers['referer'];
+  if (!source) return true; // kein Browser-Kontext (z. B. curl) -> kein CSRF
+  try {
+    const host = new URL(source).hostname.toLowerCase();
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  } catch {
+    return false; // unparsebare Herkunft -> im Zweifel ablehnen
+  }
+}
+
 // --- Öffentliche API (Contract-Signaturen, exakt) --------------------------
 
 /**
@@ -195,7 +215,8 @@ function serveDashboard(req, res) {
         "connect-src 'self'; " +
         "img-src data:; " +
         "base-uri 'none'; " +
-        "form-action 'none'",
+        "form-action 'none'; " +
+        "frame-ancestors 'none'", // Clickjacking-Schutz (Bypass-Button)
     });
     res.end(data);
   });
@@ -273,6 +294,19 @@ function handleBypass(req, res, config) {
       'Content-Type': 'application/json; charset=utf-8',
       'Content-Length': Buffer.byteLength(body),
       Allow: 'POST',
+    });
+    res.end(body);
+    return;
+  }
+
+  // CSRF-Schutz: Dieser Endpunkt schaltet den Budget-Guard. Eine cross-origin
+  // Anfrage einer Fremdseite wird an ihrer Origin/Referer erkannt und mit 403
+  // abgewiesen — sonst könnte jede offene Webseite den Schutz stumm deaktivieren.
+  if (!isLocalRequestOrigin(req)) {
+    const body = JSON.stringify({ error: 'Unerlaubte Herkunft (CSRF-Schutz).' });
+    res.writeHead(403, {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Length': Buffer.byteLength(body),
     });
     res.end(body);
     return;

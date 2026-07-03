@@ -182,7 +182,11 @@ describe('resolveUpstream', () => {
 
 describe('maybeInjectIncludeUsage', () => {
   test('OpenAI + stream:true + Flag an → include_usage gesetzt, stream bleibt', () => {
-    const body = Buffer.from(JSON.stringify({ model: 'gpt-4o', stream: true }), 'utf8');
+    // Chat-Completions-Form (messages) — nur diese bekommt stream_options.
+    const body = Buffer.from(
+      JSON.stringify({ model: 'gpt-4o', stream: true, messages: [{ role: 'user', content: 'hi' }] }),
+      'utf8',
+    );
     const out = maybeInjectIncludeUsage('openai', body, CONFIG);
     const parsed = JSON.parse(out.toString('utf8'));
     assert.equal(parsed.stream, true);
@@ -192,7 +196,7 @@ describe('maybeInjectIncludeUsage', () => {
 
   test('vorhandene stream_options-Felder bleiben erhalten', () => {
     const body = Buffer.from(
-      JSON.stringify({ stream: true, stream_options: { chunk_size: 5 } }),
+      JSON.stringify({ stream: true, stream_options: { chunk_size: 5 }, messages: [{ role: 'user', content: 'hi' }] }),
       'utf8',
     );
     const out = maybeInjectIncludeUsage('openai', body, CONFIG);
@@ -203,7 +207,7 @@ describe('maybeInjectIncludeUsage', () => {
 
   test('bereits gesetztes include_usage → Buffer unverändert (identische Referenz)', () => {
     const body = Buffer.from(
-      JSON.stringify({ stream: true, stream_options: { include_usage: true } }),
+      JSON.stringify({ stream: true, stream_options: { include_usage: true }, messages: [{ role: 'user', content: 'hi' }] }),
       'utf8',
     );
     const out = maybeInjectIncludeUsage('openai', body, CONFIG);
@@ -249,7 +253,10 @@ describe('maybeInjectIncludeUsage', () => {
   });
 
   test('Content-Length wächst nachvollziehbar (Aufrufer kann neu berechnen)', () => {
-    const body = Buffer.from(JSON.stringify({ stream: true }), 'utf8');
+    const body = Buffer.from(
+      JSON.stringify({ stream: true, messages: [{ role: 'user', content: 'hi' }] }),
+      'utf8',
+    );
     const out = maybeInjectIncludeUsage('openai', body, CONFIG);
     assert.ok(out.length > body.length);
     // Der neue Buffer ist gültiges JSON mit dem Flag.

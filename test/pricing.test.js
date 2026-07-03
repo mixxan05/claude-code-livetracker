@@ -191,7 +191,10 @@ test('computeCost: unbekanntes Modell → Kosten 0 + Warnung', () => {
   loadPricing(REAL_PRICING_PATH);
 
   const usage = {
-    model: 'gpt-4o-vision-mega-9000', // bewusst nicht in pricing.json
+    // Anderer Anbieter, KEIN Praefix-Match in pricing.json (nur claude-*/gpt-*/o*).
+    // Ein "gpt-4o-..."-Name faellt bewusst per Praefix auf gpt-4o zurueck — siehe
+    // die Snapshot-Tests in test/audit-fixes.test.js.
+    model: 'mistral-large-2411',
     inputTokens: 12_345,
     outputTokens: 6_789,
     cacheCreation5mTokens: 100,
@@ -204,13 +207,13 @@ test('computeCost: unbekanntes Modell → Kosten 0 + Warnung', () => {
   assert.equal(cost.costUSD, 0);
   assert.notEqual(cost.warning, null);
   assert.equal(
-    cost.warning.includes('gpt-4o-vision-mega-9000'),
+    cost.warning.includes('mistral-large-2411'),
     true,
     'Warnung benennt das unbekannte Modell',
   );
 
   // Anzeige-Tokens werden trotz unbekanntem Modell durchgereicht.
-  assert.equal(cost.model, 'gpt-4o-vision-mega-9000');
+  assert.equal(cost.model, 'mistral-large-2411');
   assert.equal(cost.inputTokens, 12_345);
   assert.equal(cost.outputTokens, 6_789);
   assert.equal(cost.cacheReadTokens, 4_000);

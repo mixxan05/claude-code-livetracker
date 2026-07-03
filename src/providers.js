@@ -95,12 +95,20 @@ function detectProvider(reqPath, headers) {
   if (path.includes('/v1/messages')) return 'anthropic';
   if (path.includes('/v1/chat/completions') || path.includes('/v1/responses')) return 'openai';
 
-  // --- Sekundär: Auth-Header-basierte Erkennung ---
+  // --- Sekundär: Auth-/Header-basierte Erkennung ---
   const h = lowerKeys(headers);
   // x-api-key ist der eindeutig Anthropic-typische Schlüssel und hat Vorrang.
   if (h['x-api-key']) return 'anthropic';
+  // Anthropic-spezifische Header (auch im OAuth-/Abo-Modus gesendet) haben Vorrang
+  // vor der groben Bearer-Heuristik.
+  if (h['anthropic-version'] || h['anthropic-beta']) return 'anthropic';
   const auth = h['authorization'];
-  if (typeof auth === 'string' && /^\s*bearer\s+/i.test(auth)) return 'openai';
+  if (typeof auth === 'string' && /^\s*bearer\s+/i.test(auth)) {
+    // Anthropic-OAuth (Claude-Abo-Modus) nutzt ebenfalls "Authorization: Bearer",
+    // aber mit einem sk-ant-Token. Nur echte Nicht-Anthropic-Bearer sind OpenAI.
+    if (/bearer\s+sk-ant/i.test(auth)) return 'anthropic';
+    return 'openai';
+  }
 
   // Kein verlässliches Signal.
   return null;
@@ -167,6 +175,13 @@ function resolveUpstream(provider, config) {
  *   - provider === 'openai'
  *   - config.injectOpenAIUsage === true
  *   - der Body ist gültiges JSON-Objekt mit `stream: true`
+ *   - der Body hat die Chat-Completions-Form (Feld `messages` als Array)
+ *
+ * Der letzte Punkt ist entscheidend: `stream_options` ist ausschließlich ein
+ * Chat-Completions-Parameter. Die OpenAI Responses-API (`/v1/responses`, Body-Form
+ * mit `input` statt `messages`) kennt ihn nicht und lehnt fremde Top-Level-Parameter
+ * strikt mit HTTP 400 ab — dort darf also niemals injiziert werden (usage kommt bei
+ * Responses ohnehin automatisch im `response.completed`-Event).
  *
  * In allen anderen Fällen (anderer Provider, Flag aus, Non-Stream, Nicht-JSON /
  * Parse-Fehler, leerer/kein Buffer, bereits gesetztes Flag) wird der EXAKT selbe
@@ -192,6 +207,13 @@ function maybeInjectIncludeUsage(provider, bodyBuffer, config) {
 
   // Nur echte Objekte mit stream:true anfassen (Arrays/primitives ignorieren).
   if (!obj || typeof obj !== 'object' || Array.isArray(obj) || obj.stream !== true) {
+    return bodyBuffer;
+  }
+
+  // Nur die Chat-Completions-Form (Feld `messages`) bekommt stream_options. Die
+  // Responses-API (`input` statt `messages`) würde den fremden Parameter mit 400
+  // ablehnen — dort niemals injizieren.
+  if (!Array.isArray(obj.messages)) {
     return bodyBuffer;
   }
 

@@ -128,6 +128,29 @@ function pathnameOf(rawUrl) {
 }
 
 /**
+ * Prüft, ob der Host-Header auf einen lokalen Namen zeigt (localhost, 127.0.0.1,
+ * [::1]). Schützt die lokalen Endpunkte vor DNS-Rebinding: Der Proxy ist an
+ * 127.0.0.1 gebunden, aber ein per Rebinding auf 127.0.0.1 aufgelöster Fremd-
+ * Hostname trägt weiterhin SEINEN eigenen Namen im Host-Header und wird so
+ * abgewiesen. Fehlt der Header (z. B. HTTP/1.0), wird erlaubt — kein Browser-Kontext.
+ * @param {string|undefined} hostHeader
+ * @returns {boolean}
+ */
+function isLocalHost(hostHeader) {
+  if (!hostHeader) return true; // HTTP/1.0 ohne Host -> kein Browser -> kein Rebinding
+  let host = String(hostHeader).trim().toLowerCase();
+  // Hostname vom optionalen Port trennen (IPv6-Literale stehen in eckigen Klammern).
+  if (host.startsWith('[')) {
+    const end = host.indexOf(']');
+    host = end === -1 ? host.slice(1) : host.slice(1, end);
+  } else {
+    const colon = host.indexOf(':');
+    if (colon !== -1) host = host.slice(0, colon);
+  }
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
+}
+
+/**
  * Sammelt den kompletten Request-Body in einem Buffer. Der Body wird ohnehin
  * benötigt (mögliche include_usage-Injektion) und danach vollständig mit korrekter
  * Content-Length weitergesendet.
@@ -219,6 +242,14 @@ function handleProxy(req, res, config) {
     delete headers['proxy-connection'];
     delete headers['transfer-encoding'];
 
+    // Kompression abschalten: der usage-Tap muss den KLARTEXT der Antwort sehen.
+    // Ohne dies könnte der Upstream gzip/br/deflate senden — der Datenstrom liefe
+    // zwar byte-identisch zum Client durch (der dekomprimiert selbst), aber der
+    // Extraktor bekäme komprimierte Bytes und das Tracking (und damit der
+    // Budget-Guard) fiele still aus. Neben der optionalen include_usage-Injektion
+    // ist dies der zweite bewusste Eingriff.
+    headers['accept-encoding'] = 'identity';
+
     const defaultPort = upstream.protocol === 'https' ? 443 : 80;
     headers.host =
       upstream.port === defaultPort ? upstream.host : `${upstream.host}:${upstream.port}`;
@@ -273,6 +304,19 @@ function handleProxy(req, res, config) {
             const cost = pricing.computeCost(usage);
             const state = spend.recordSpend(cost);
             enrichState(state, config);
+            dashboard.broadcast(state);
+          } else if (
+            provider &&
+            upstreamRes.statusCode >= 200 &&
+            upstreamRes.statusCode < 300 &&
+            /\/v1\/(messages|chat\/completions|responses)/.test(req.url || '')
+          ) {
+            // Erfolgreiche API-Antwort auf einem usage-tragenden Endpunkt, aber keine
+            // usage extrahierbar (Contract: "usage nicht parsbar → Kosten 0 + Warnung").
+            // Dezente Warnung ohne Buchung; /v1/models u. Ä. lösen bewusst keine aus.
+            const state = enrichState(spend.getState(), config);
+            state.warning =
+              'Nutzungsdaten der letzten Antwort konnten nicht ausgelesen werden – Kosten nicht erfasst.';
             dashboard.broadcast(state);
           }
         } catch {
@@ -332,6 +376,14 @@ function makeListener(config) {
     res.on('error', () => {
       /* Verbindungsfehler werden pro Pfad behandelt; hier nur absichern */
     });
+
+    // DNS-Rebinding-Schutz: nur lokale Host-Header akzeptieren (siehe isLocalHost).
+    if (!isLocalHost(req.headers.host)) {
+      sendJson(res, 403, {
+        error: 'Ungueltiger Host. Nur lokale Zugriffe (localhost / 127.0.0.1) sind erlaubt.',
+      });
+      return;
+    }
 
     const pathname = pathnameOf(req.url);
 

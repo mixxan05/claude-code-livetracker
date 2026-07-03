@@ -233,3 +233,26 @@ startServer(config) -> http.Server        // erstellt + startet den HTTP-Server
   unverändert.
 - Bei direktem Aufruf (`require.main === module`): `config.json` laden, `startServer(config)`,
   Startmeldung inkl. Dashboard-URL (`http://localhost:<port>/dashboard`) loggen.
+
+---
+
+## 4. Audit-Fixes (2026-07-02) — Präzisierungen des Verhaltens
+
+Signaturen bleiben unverändert; die folgenden Verhaltensdetails wurden nach dem
+adversarialen Audit ergänzt (Regressionstests in `test/audit-fixes.test.js`):
+
+- **`providers.detectProvider`** — Vorrang für Anthropic-Signale im Header-Rückfall:
+  `x-api-key`, `anthropic-version`/`anthropic-beta` und `Authorization: Bearer sk-ant…`
+  (Claude-OAuth/Abo) → `'anthropic'`. Nur ein *gewöhnlicher* Bearer → `'openai'`.
+- **`providers.maybeInjectIncludeUsage`** — injiziert **nur** bei Chat-Completions-Form
+  (Feld `messages` als Array). Die Responses-API (`/v1/responses`, Feld `input`) bleibt
+  unverändert, da sie `stream_options` mit 400 ablehnen würde (usage kommt dort automatisch).
+- **`pricing.computeCost`** — Modell-Auflösung mit Präfix-Fallback: exakter Match, sonst
+  längster passender Präfix-Key an Bindestrich-Grenze (`gpt-4o-2024-08-06` → `gpt-4o`,
+  `gpt-4o-mini-2024-07-18` → `gpt-4o-mini`). Erst wenn auch das scheitert: 0 + Warnung.
+- **`proxy.js`** — erzwingt `accept-encoding: identity` zum Upstream (sonst könnte eine
+  gzip/br-Antwort das Tracking und damit den Budget-Guard still aushebeln). Setzt bei
+  erfolgreicher API-Antwort ohne extrahierbare usage eine dezente Dashboard-Warnung.
+  Weist nicht-lokale `Host`-Header mit 403 ab (DNS-Rebinding-Schutz).
+- **`dashboard.handleBypass`** — CSRF-Schutz: cross-origin Herkunft (Origin/Referer) wird
+  mit 403 abgewiesen; CSP um `frame-ancestors 'none'` ergänzt (Clickjacking).
