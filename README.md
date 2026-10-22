@@ -217,6 +217,11 @@ Beiträge sind willkommen! Das Projekt ist bewusst **zero-dependency** (ausschli
 Node-stdlib) — bitte diesen Grundsatz beibehalten. Vor einem Pull Request `node --test`
 ausführen; alle Tests müssen grün sein. Neue Funktionen möglichst mit Tests abdecken.
 
+**Node-Versionen:** `engines` lässt nur die gepatchten Stände zu (`^22.23.4 || ^24.22.1 || >=26.12.1`,
+Node.js-Sicherheits-Release vom 21.10.2026), und die CI testet genau diese drei Versionen. Bei jedem
+Node.js-Sicherheits-Release werden `engines`, die CI-Matrix in `.github/workflows/ci.yml`, das Badge
+und die Angabe unter „Voraussetzungen“ gemeinsam angehoben.
+
 ## Lizenz
 
 [MIT](LICENSE) © Michael Kaiser
