@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/mixxan05/claude-code-livetracker/actions/workflows/ci.yml/badge.svg)](https://github.com/mixxan05/claude-code-livetracker/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org)
+[![Node.js](https://img.shields.io/badge/node-22.23.4%2B%20%7C%2024.22.1%2B%20%7C%2026.12.1%2B-brightgreen.svg)](https://nodejs.org)
 [![Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)
 
 Ein **lokaler Reverse-Proxy** als Echtzeit-Kostenwächter für den API-Verkehr autonomer
@@ -23,7 +23,7 @@ Upstream. Das Tracking läuft parallel zum durchgereichten Stream und verzögert
 
 ## Voraussetzungen
 
-- **Node.js ≥ 18** (getestet mit v22). Keine weiteren Abhängigkeiten.
+- **Node.js 22.23.4+, 24.22.1+ oder 26.12.1+** (getestet mit v26.12.1). Keine weiteren Abhängigkeiten.
 
 ## Setup & Start
 
